@@ -1,6 +1,9 @@
 import './env'
 import { query, getPool } from '../lib/db'
 import { classificar } from '../lib/match'
+import { existeNoPortal } from '../lib/registo/sitesearch'
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /**
  * Re-avalia todos os alojamentos já gravados contra o registo atual, sem
@@ -23,7 +26,16 @@ async function main() {
       morada: a.morada,
       rralDetetado: a.rral_detetado,
     })
+    let portalSlug: string | null = null
     if (!c.registado) {
+      try {
+        portalSlug = await existeNoPortal(a.nome)
+      } catch {
+        /* portal indisponível → mantém suspeito */
+      }
+      await sleep(300)
+    }
+    if (!c.registado && !portalSlug) {
       const motivo = a.rral_detetado ? 'rral_nao_encontrado' : 'sem_rral'
       await query(
         `INSERT INTO suspeitos (alojamento_id, motivo, evidencia)

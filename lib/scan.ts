@@ -3,9 +3,11 @@ import { fetchBookingApify, type BookingItem } from './booking/apify'
 import { classificar, type Motivo } from './match'
 import { refreshAzores } from './registo/azores'
 import { refreshRnal } from './registo/rnal'
+import { existeNoPortal } from './registo/sitesearch'
 import { enviarRelatorio, type SuspeitoEmail } from './email'
 
 const REGISTO_MAX_IDADE_DIAS = 7
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 // Tipos do Booking que NÃO são alojamento local (têm RNET, não RRAL) — ignorados.
 const TIPOS_FORA = new Set(['hotel', 'resort', 'motel'])
@@ -95,7 +97,19 @@ export async function correrScan(): Promise<ScanResultado> {
         morada: data.morada,
         rralDetetado: data.rralDetetado,
       })
+
+      // Fallback: se o índice não casou, pesquisa o nome no portal do governo.
+      let portalSlug: string | null = null
       if (!c.registado) {
+        try {
+          portalSlug = await existeNoPortal(data.nome)
+        } catch {
+          /* portal indisponível → mantém como suspeito para revisão */
+        }
+        await sleep(300) // ser educado com o portal
+      }
+
+      if (!c.registado && !portalSlug) {
         const motivo: Motivo = data.rralDetetado ? 'rral_nao_encontrado' : 'sem_rral'
         await query(
           `INSERT INTO suspeitos (alojamento_id, motivo, evidencia)
