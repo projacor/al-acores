@@ -3,6 +3,7 @@ import { listarSuspeitos, contarPorEstado } from '@/lib/queries'
 import { ILHAS } from '@/lib/ilhas'
 import { EstadoBadge, motivoLabel } from '@/components/EstadoBadge'
 import { SuspeitoActions } from '@/components/SuspeitoActions'
+import { limparMorada, rralLegivel } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,7 +44,7 @@ export default async function SuspeitosPage({
       {suspeitos.length === 0 ? (
         <Vazio />
       ) : (
-        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
               <tr>
@@ -65,8 +66,10 @@ export default async function SuspeitosPage({
                     </a>
                   </td>
                   <td className="px-3 py-2 text-gray-600">{s.ilha ?? '—'}</td>
-                  <td className="px-3 py-2 text-gray-600">{s.morada ?? '—'}</td>
-                  <td className="px-3 py-2 text-gray-600">{s.rral_detetado ?? '—'}</td>
+                  <td className="px-3 py-2 text-gray-600">{limparMorada(s.morada)}</td>
+                  <td className="px-3 py-2 font-mono text-xs text-gray-600">
+                    {rralLegivel(s.rral_detetado)}
+                  </td>
                   <td className="px-3 py-2 text-gray-600">{motivoLabel(s.motivo)}</td>
                   <td className="px-3 py-2">
                     <EstadoBadge estado={s.estado} />
