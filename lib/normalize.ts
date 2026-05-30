@@ -39,6 +39,24 @@ export function normalizeName(s: string): string {
   return nameTokens(s).sort().join(' ')
 }
 
+/**
+ * Extrai o nome comercial de um título do registo. Os títulos seguem o padrão
+ * «Entidade Lda – "Nome Comercial"» ou «Entidade – Nome Comercial». O Booking
+ * mostra só o nome comercial, por isso é por aí que devemos comparar.
+ */
+export function commercialName(s: string): string {
+  // 1) Parte entre aspas, se existir.
+  const quoted = s.match(/"([^"]+)"/)
+  if (quoted && quoted[1].trim()) return quoted[1].trim()
+  // 2) Parte depois do último travessão/hífen separador.
+  const parts = s.split(/\s[–—-]\s|–|—/)
+  if (parts.length > 1) {
+    const last = parts[parts.length - 1].trim()
+    if (last) return last
+  }
+  return s.trim()
+}
+
 /** Morada normalizada (abreviaturas expandidas, sem pontuação). */
 export function normalizeAddress(s: string): string {
   return deburr(s)

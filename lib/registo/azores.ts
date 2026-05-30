@@ -6,7 +6,7 @@
  * páginas de detalhe /pin/<alias>/, que são HTML estático (basta fetch + regex).
  */
 import { query } from '../db'
-import { normalizeAddress, normalizeName, extractRral } from '../normalize'
+import { normalizeAddress, normalizeName, commercialName, extractRral } from '../normalize'
 
 const BASE = 'https://turismo.azores.gov.pt'
 
@@ -37,7 +37,8 @@ type Pin = { title: string; ilha: string | null; alias: string }
 function decodeEntities(s: string): string {
   return s
     .replace(/&#8211;|&#8212;/g, '–')
-    .replace(/&#8220;|&#8221;|&#8217;|&#8216;/g, '"')
+    .replace(/&#8220;|&#8221;/g, '"') // aspas duplas curvas → "
+    .replace(/&#8217;|&#8216;/g, "'") // apóstrofo/aspas simples → '
     .replace(/&amp;/g, '&')
     .replace(/&quot;/g, '"')
     .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
@@ -109,18 +110,29 @@ export async function refreshAzores(opts?: {
   const pins = await fetchPins()
   log(`al-map: ${pins.length} AL na lista-mestra.`)
 
-  // Upsert da lista-mestra (por slug único).
-  for (const p of pins) {
+  // Upsert da lista-mestra em lotes (multi-row) — muito mais rápido sobre a rede.
+  const CHUNK = 500
+  for (let i = 0; i < pins.length; i += CHUNK) {
+    const lote = pins.slice(i, i + CHUNK)
+    const valores: string[] = []
+    const params: unknown[] = []
+    lote.forEach((p, j) => {
+      const b = j * 4
+      valores.push(`($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, 'azores')`)
+      // nome_norm a partir do nome COMERCIAL (é o que o Booking mostra).
+      params.push(p.alias, p.title, normalizeName(commercialName(p.title)), p.ilha)
+    })
     await query(
       `INSERT INTO registo_al (slug, nome, nome_norm, ilha, fonte)
-       VALUES ($1, $2, $3, $4, 'azores')
+       VALUES ${valores.join(', ')}
        ON CONFLICT (slug) DO UPDATE SET
          nome = EXCLUDED.nome,
          nome_norm = EXCLUDED.nome_norm,
          ilha = EXCLUDED.ilha,
          atualizado_em = now()`,
-      [p.alias, p.title, normalizeName(p.title), p.ilha],
+      params,
     )
+    log(`  upsert lote ${i / CHUNK + 1}: +${lote.length}`)
   }
 
   // Enriquecer linhas ainda sem RRAL (resumível entre execuções).
