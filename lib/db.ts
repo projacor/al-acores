@@ -10,8 +10,9 @@ export function getPool(): Pool {
     }
     pool = new Pool({
       connectionString,
-      // Railway Postgres exige SSL; em local (localhost) desligamos.
-      ssl: /localhost|127\.0\.0\.1/.test(connectionString)
+      // Sem SSL em localhost e na rede interna do Railway (.railway.internal é
+      // texto simples). SSL só para ligações públicas/externas.
+      ssl: /localhost|127\.0\.0\.1|\.railway\.internal/.test(connectionString)
         ? undefined
         : { rejectUnauthorized: false },
       max: 5,

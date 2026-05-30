@@ -19,8 +19,15 @@ export async function POST(req: NextRequest) {
   }
 
   if (req.nextUrl.searchParams.get('wait') === '1') {
-    const r = await correrScan()
-    return NextResponse.json(r)
+    try {
+      const r = await correrScan()
+      return NextResponse.json(r)
+    } catch (e) {
+      return NextResponse.json(
+        { erro: 'Scan falhou', detalhe: (e as Error).message },
+        { status: 500 },
+      )
+    }
   }
 
   // Fire-and-forget: corre em segundo plano no processo do servidor.
