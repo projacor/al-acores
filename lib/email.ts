@@ -28,7 +28,7 @@ export async function enviarRelatorio(
   }
 
   const resend = new Resend(apiKey)
-  const hoje = new Date().toLocaleDateString('pt-PT', { timeZone: 'Europe/Lisbon' })
+  const hoje = new Date().toLocaleDateString('pt-PT', { timeZone: 'Atlantic/Azores' })
 
   const linhas = suspeitos
     .map(

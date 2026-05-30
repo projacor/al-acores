@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 
 function fmt(d: string | null): string {
   if (!d) return '—'
-  return new Date(d).toLocaleString('pt-PT', { timeZone: 'Europe/Lisbon' })
+  return new Date(d).toLocaleString('pt-PT', { timeZone: 'Atlantic/Azores' })
 }
 
 export default async function RunsPage() {
