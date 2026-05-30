@@ -113,6 +113,7 @@ export type RevisaoView = {
   descricao: string | null
   indicios: string | null
   url: string
+  fonte: string
   estado: string
   visto_em: string
 }
@@ -126,7 +127,7 @@ export async function listarRevisao(estado?: string): Promise<RevisaoView[]> {
     filtro = 'WHERE estado = $1'
   }
   return query<RevisaoView>(
-    `SELECT id, titulo, preco, ilha, descricao, indicios, url, estado, visto_em
+    `SELECT id, titulo, preco, ilha, descricao, indicios, url, fonte, estado, visto_em
        FROM fb_revisao ${filtro} ORDER BY visto_em DESC LIMIT 500`,
     params,
   )

@@ -16,4 +16,8 @@ echo "--- Facebook Marketplace ---"
 npm run fb
 echo "--- FB terminado (exit $?) ---"
 
+echo "--- Airbnb (ZenRows) ---"
+npm run airbnb
+echo "--- Airbnb terminado (exit $?) ---"
+
 echo "===== corrida semanal terminada: $(date) ====="

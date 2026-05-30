@@ -9,6 +9,7 @@
     "lint": "eslint",
     "scan": "tsx worker/scan.ts",
     "fb": "tsx worker/fb-scan.ts",
+    "airbnb": "tsx worker/airbnb-scan.ts",
     "reclassify": "tsx worker/reclassify.ts",
     "registo:refresh": "tsx worker/refresh-registo.ts",
     "db:init": "tsx worker/db-init.ts"

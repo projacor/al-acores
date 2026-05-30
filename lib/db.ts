@@ -89,8 +89,10 @@ export async function initSchema(): Promise<void> {
       descricao    TEXT,
       indicios     TEXT,
       url          TEXT NOT NULL,
+      fonte        TEXT NOT NULL DEFAULT 'facebook',
       estado       TEXT NOT NULL DEFAULT 'novo',
       visto_em     TIMESTAMPTZ DEFAULT now()
     );
+    ALTER TABLE fb_revisao ADD COLUMN IF NOT EXISTS fonte TEXT NOT NULL DEFAULT 'facebook';
   `)
 }
