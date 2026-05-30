@@ -1,11 +1,5 @@
 import { query } from './db'
-import {
-  jaccard,
-  levenshteinSim,
-  nameTokens,
-  normalizeAddress,
-  normalizeRral,
-} from './normalize'
+import { levenshteinSim, nameTokens, normalizeRral } from './normalize'
 
 export type RegistoRow = {
   id: number
@@ -23,9 +17,19 @@ export type Classificacao =
 
 export type Motivo = 'sem_rral' | 'rral_nao_encontrado' | 'nome_morada_nao_encontrados'
 
-// Limiares conservadores para reduzir falsos positivos (marcar registado a mais).
-const NOME_THRESHOLD = 0.62
-const MORADA_THRESHOLD = 0.7
+// Fração mínima de overlap (tokens partilhados / menor conjunto) para casar nome.
+const NOME_OVERLAP = 0.6
+
+/** Código postal (9XXX-XXX) normalizado sem hífen, ou '' se não houver. */
+function postal(s: string | null): string {
+  const m = (s || '').match(/9\d{3}-?\d{3}/)
+  return m ? m[0].replace('-', '') : ''
+}
+
+/** Tokens distintivos da rua (sem números nem palavras curtas). */
+function ruaTokens(s: string | null): Set<string> {
+  return new Set(nameTokens(s || '').filter((t) => t.length > 2 && !/^\d+$/.test(t)))
+}
 
 export type Alvo = {
   nome: string
@@ -68,27 +72,40 @@ export async function classificar(alvo: Alvo): Promise<Classificacao> {
     // Não confirmado por RRAL — continua para o match por nome.
   }
 
-  // 2) Match aproximado por nome (+ confirmação por morada).
+  // 2) Match por nome via tokens distintivos partilhados.
+  //    O registo tem o nome do dono à frente ("Dono – Nome Comercial") e o
+  //    Booking acrescenta sufixos de marketing ("- Ocean View"). Por isso
+  //    contamos quantos tokens distintivos coincidem, em vez de Jaccard.
   const alvoTokens = nameTokens(alvo.nome)
-  const alvoMorada = alvo.morada ? normalizeAddress(alvo.morada) : ''
+  const alvoSet = new Set(alvoTokens)
+  // Para morada: código postal + tokens de rua (desambigua nomes curtos).
+  const alvoPostal = postal(alvo.morada)
+  const alvoRua = ruaTokens(alvo.morada)
 
   let melhor: { row: RegistoRow; score: number; via: 'nome' | 'morada' } | null = null
 
   for (const row of candidatos) {
-    const nomeScore = Math.max(
-      jaccard(alvoTokens, row.nome_norm.split(' ')),
-      levenshteinSim(alvoTokens.join(' '), row.nome_norm),
-    )
-    if (nomeScore >= NOME_THRESHOLD) {
-      if (!melhor || nomeScore > melhor.score) {
-        melhor = { row, score: nomeScore, via: 'nome' }
+    // 2a) Match por morada: mesmo código postal + ≥2 tokens de rua → forte.
+    if (alvoPostal && row.morada && postal(row.morada) === alvoPostal) {
+      const regRua = ruaTokens(row.morada)
+      let s = 0
+      for (const t of alvoRua) if (regRua.has(t)) s++
+      if (s >= 2) {
+        const score = 10 + s // morada bate mais que nome
+        if (!melhor || score > melhor.score) melhor = { row, score, via: 'morada' }
+        continue
       }
     }
-    // Reforço por morada (quando ambos têm morada).
-    if (alvoMorada && row.morada_norm) {
-      const moradaScore = levenshteinSim(alvoMorada, row.morada_norm)
-      if (moradaScore >= MORADA_THRESHOLD && (!melhor || moradaScore > melhor.score)) {
-        melhor = { row, score: moradaScore, via: 'morada' }
+    // 2b) Match por nome: tokens distintivos partilhados (≥2) ou quase idêntico.
+    const regSet = new Set(row.nome_norm.split(' ').filter(Boolean))
+    if (regSet.size) {
+      let shared = 0
+      for (const t of alvoSet) if (regSet.has(t)) shared++
+      const overlap = shared / Math.min(alvoSet.size, regSet.size)
+      const exato = levenshteinSim(alvoTokens.join(' '), row.nome_norm) >= 0.9
+      if ((shared >= 2 && overlap >= NOME_OVERLAP) || exato) {
+        const score = shared + overlap
+        if (!melhor || score > melhor.score) melhor = { row, score, via: 'nome' }
       }
     }
   }

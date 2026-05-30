@@ -135,10 +135,12 @@ export async function refreshAzores(opts?: {
   }
   log(`Lista-mestra carregada (${slugs.length}).`)
 
-  // Enriquecer linhas ainda sem RRAL (resumível entre execuções), em paralelo.
+  // Enriquecer linhas ainda não visitadas (sem morada), resumível, em paralelo.
+  // (Muitas páginas do registo não publicam RRAL, por isso usamos a morada como
+  // marca de "já enriquecido" — quase todas têm bloco de Localização.)
   const porEnriquecer = await query<{ slug: string }>(
     `SELECT slug FROM registo_al
-      WHERE fonte = 'azores' AND rral IS NULL
+      WHERE fonte = 'azores' AND morada IS NULL
       ${enrichLimit > 0 ? 'LIMIT ' + enrichLimit : ''}`,
   )
   log(`A enriquecer ${porEnriquecer.length} detalhes (concorrência ${concurrency})...`)
