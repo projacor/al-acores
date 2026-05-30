@@ -36,11 +36,13 @@ Variáveis úteis: `ILHAS` (CSV, vazio=todas), `MAX_LISTINGS` (0=sem limite),
 
 ## Deploy no Railway
 
+O build usa o **Dockerfile** (imagem oficial do Playwright, já com Chromium).
+
 1. **Postgres** — adicionar o plugin (injeta `DATABASE_URL`).
-2. **Serviço `web`** — deste repo; build NIXPACKS, start `npm start`. Variáveis:
+2. **Serviço `web`** — deste repo; build por Dockerfile, start `npm start`. Variáveis:
    `DATABASE_URL`, `DASHBOARD_PASSWORD`, `RUN_TOKEN`, `RESEND_API_KEY`,
    `EMAIL_FROM`, `EMAIL_TO`.
-3. **Serviço `worker`** — mesmo repo; **Start Command** `npm run scan`,
+3. **Serviço `worker`** — mesmo repo/Dockerfile; **Start Command** `npm run scan`,
    **Cron Schedule** `0 9 * * *`, variável `TZ=Europe/Lisbon`. Mesmas variáveis.
 
 Ver `railway.worker.json` para referência da config do worker.
