@@ -23,8 +23,15 @@ export async function POST(req: NextRequest) {
       const r = await correrScan()
       return NextResponse.json(r)
     } catch (e) {
+      const err = e as { message?: string; code?: string; name?: string; stack?: string }
       return NextResponse.json(
-        { erro: 'Scan falhou', detalhe: (e as Error).message },
+        {
+          erro: 'Scan falhou',
+          detalhe: err?.message || String(e),
+          code: err?.code,
+          name: err?.name,
+          stack: err?.stack?.split('\n').slice(0, 4),
+        },
         { status: 500 },
       )
     }
