@@ -1,12 +1,14 @@
 /**
  * Índice do registo regional de AL dos Açores (turismo.azores.gov.pt).
  *
- * Fonte primária: a página do mapa /al-map/ embebe `var pins = [...]` com TODOS
- * os AL (título, ilha, alias) numa só request. O nº RRAL e a morada vêm das
- * páginas de detalhe /pin/<alias>/, que são HTML estático (basta fetch + regex).
+ * Fonte: o SITEMAP (`/sitemap.xml` → `/sitemap-pin-N.xml`) lista TODAS as páginas
+ * `/pin/<slug>/` de AL (muito mais completo que o /al-map/, que só tinha os
+ * geocodificados). Cada `/pin/` é HTML estático: extraímos nome (H1), nº RRAL,
+ * morada e deduzimos a ilha pelo código postal.
  */
 import { query } from '../db'
 import { normalizeAddress, normalizeName, commercialName, extractRral } from '../normalize'
+import { ilhaFromMorada } from '../ilhas'
 
 const BASE = 'https://turismo.azores.gov.pt'
 
@@ -20,25 +22,11 @@ const HEADERS: Record<string, string> = {
   'Accept-Language': 'pt-PT,pt;q=0.9,en;q=0.8',
 }
 
-const SLUG_ILHA: Record<string, string> = {
-  'santa-maria': 'Santa Maria',
-  'sao-miguel': 'São Miguel',
-  terceira: 'Terceira',
-  graciosa: 'Graciosa',
-  'sao-jorge': 'São Jorge',
-  pico: 'Pico',
-  faial: 'Faial',
-  flores: 'Flores',
-  corvo: 'Corvo',
-}
-
-type Pin = { title: string; ilha: string | null; alias: string }
-
 function decodeEntities(s: string): string {
   return s
     .replace(/&#8211;|&#8212;/g, '–')
-    .replace(/&#8220;|&#8221;/g, '"') // aspas duplas curvas → "
-    .replace(/&#8217;|&#8216;/g, "'") // apóstrofo/aspas simples → '
+    .replace(/&#8220;|&#8221;/g, '"')
+    .replace(/&#8217;|&#8216;/g, "'")
     .replace(/&amp;/g, '&')
     .replace(/&quot;/g, '"')
     .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
@@ -46,121 +34,139 @@ function decodeEntities(s: string): string {
     .trim()
 }
 
-/** Lê o array `pins` do mapa → lista completa de AL (sem RRAL/morada). */
-export async function fetchPins(): Promise<Pin[]> {
-  const res = await fetch(`${BASE}/al-map/`, { headers: HEADERS })
-  if (!res.ok) throw new Error(`al-map respondeu ${res.status}`)
-  const html = await res.text()
-  const m = html.match(/var pins = (\[[\s\S]*?\]);/)
-  if (!m) throw new Error('Não foi possível localizar o array `pins` em /al-map/.')
-  const raw = JSON.parse(m[1]) as Array<{
-    title: string
-    azores?: string[]
-    alias: string
-  }>
-  return raw
-    .filter((p) => p.alias)
-    .map((p) => ({
-      title: decodeEntities(p.title),
-      ilha: p.azores?.[0] ? SLUG_ILHA[p.azores[0]] ?? null : null,
-      alias: p.alias,
-    }))
+/** Lê todos os slugs de AL a partir do sitemap (lista completa). */
+export async function fetchSlugs(): Promise<string[]> {
+  const idx = await (await fetch(`${BASE}/sitemap.xml`, { headers: HEADERS })).text()
+  const pinMaps = [...idx.matchAll(/<loc>([^<]*sitemap-pin[^<]*)<\/loc>/g)].map((m) => m[1])
+  if (pinMaps.length === 0) throw new Error('Sitemap sem sub-sitemaps de pin.')
+
+  const slugs = new Set<string>()
+  for (const pm of pinMaps) {
+    const xml = await (await fetch(pm, { headers: HEADERS })).text()
+    for (const m of xml.matchAll(/<loc>https?:\/\/[^<]*\/pin\/([^<\/]+)\/?<\/loc>/g)) {
+      slugs.add(m[1].replace(/\/$/, ''))
+    }
+  }
+  return [...slugs]
 }
 
-type Detalhe = { rral: string | null; morada: string | null }
+type Detalhe = { nome: string | null; rral: string | null; morada: string | null }
 
-/** Lê RRAL e morada de uma página de detalhe /pin/<alias>/. */
-export async function fetchDetalhe(alias: string): Promise<Detalhe> {
-  const res = await fetch(`${BASE}/pin/${alias}/`, { headers: HEADERS })
-  if (!res.ok) return { rral: null, morada: null }
+/** Lê nome (H1), RRAL e morada de uma página de detalhe /pin/<slug>/. */
+export async function fetchDetalhe(slug: string): Promise<Detalhe> {
+  const res = await fetch(`${BASE}/pin/${slug}/`, { headers: HEADERS })
+  if (!res.ok) return { nome: null, rral: null, morada: null }
   const html = await res.text()
+
+  const h1 = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/)
+  const nome = h1 ? decodeEntities(h1[1].replace(/<[^>]+>/g, '')) || null : null
 
   const blocos = [...html.matchAll(/<div class="dados-text"><b>(.*?)<\/b>([\s\S]*?)<\/div>/g)]
   let rral: string | null = null
   let morada: string | null = null
   for (const b of blocos) {
     const label = decodeEntities(b[1].replace(/<[^>]+>/g, ''))
-    const value = decodeEntities(
-      b[2].replace(/<\/?br\s*\/?>/g, '\n').replace(/<[^>]+>/g, ''),
-    )
+    const value = decodeEntities(b[2].replace(/<\/?br\s*\/?>/g, '\n').replace(/<[^>]+>/g, ''))
     if (/registo/i.test(label)) rral = extractRral(value)
     else if (/localiza/i.test(label)) {
-      // Linhas: rua / código-postal-localidade / ilha → morada = tudo menos a ilha final.
       const linhas = value.split('\n').map((l) => l.trim()).filter(Boolean)
       morada = linhas.slice(0, Math.max(1, linhas.length - 1)).join(', ')
     }
   }
-  return { rral, morada }
+  return { nome, rral, morada }
+}
+
+function nomeFromSlug(slug: string): string {
+  return slug.replace(/-/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+/** Corre `fn` sobre `items` com concorrência limitada. */
+async function pool<T>(items: T[], n: number, fn: (t: T) => Promise<void>): Promise<void> {
+  let i = 0
+  await Promise.all(
+    Array.from({ length: Math.min(n, items.length) }, async () => {
+      while (i < items.length) {
+        const idx = i++
+        try {
+          await fn(items[idx])
+        } catch {
+          /* ignora falhas individuais */
+        }
+      }
+    }),
+  )
 }
 
 /**
- * Atualiza a tabela registo_al a partir do portal dos Açores.
- * - Sempre faz upsert da lista-mestra (nome + ilha).
- * - Enriquece com RRAL/morada as linhas em falta, com rate-limit e limite opcional.
+ * Atualiza registo_al a partir do sitemap dos Açores.
+ * - Upsert da lista-mestra (slug + nome provisório derivado do slug).
+ * - Enriquece com nome (H1), RRAL, morada e ilha as linhas em falta (concorrente).
  */
 export async function refreshAzores(opts?: {
   enrichLimit?: number
-  delayMs?: number
+  concurrency?: number
   log?: (m: string) => void
 }): Promise<{ total: number; enriquecidos: number }> {
   const log = opts?.log ?? (() => {})
-  const delayMs = opts?.delayMs ?? 800
+  const concurrency = opts?.concurrency ?? Number(process.env.REGISTO_CONCURRENCY || 6)
   const enrichLimit = opts?.enrichLimit ?? Number(process.env.REGISTO_ENRICH_LIMIT || 0)
 
-  const pins = await fetchPins()
-  log(`al-map: ${pins.length} AL na lista-mestra.`)
+  const slugs = await fetchSlugs()
+  log(`sitemap: ${slugs.length} AL na lista-mestra.`)
 
-  // Upsert da lista-mestra em lotes (multi-row) — muito mais rápido sobre a rede.
+  // Upsert da lista-mestra em lotes (slug + nome provisório a partir do slug).
   const CHUNK = 500
-  for (let i = 0; i < pins.length; i += CHUNK) {
-    const lote = pins.slice(i, i + CHUNK)
+  for (let i = 0; i < slugs.length; i += CHUNK) {
+    const lote = slugs.slice(i, i + CHUNK)
     const valores: string[] = []
     const params: unknown[] = []
-    lote.forEach((p, j) => {
-      const b = j * 4
-      valores.push(`($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, 'azores')`)
-      // nome_norm a partir do nome COMERCIAL (é o que o Booking mostra).
-      params.push(p.alias, p.title, normalizeName(commercialName(p.title)), p.ilha)
+    lote.forEach((slug, j) => {
+      const b = j * 3
+      const nome = nomeFromSlug(slug)
+      valores.push(`($${b + 1}, $${b + 2}, $${b + 3}, 'azores')`)
+      params.push(slug, nome, normalizeName(commercialName(nome)))
     })
     await query(
-      `INSERT INTO registo_al (slug, nome, nome_norm, ilha, fonte)
+      `INSERT INTO registo_al (slug, nome, nome_norm, fonte)
        VALUES ${valores.join(', ')}
-       ON CONFLICT (slug) DO UPDATE SET
-         nome = EXCLUDED.nome,
-         nome_norm = EXCLUDED.nome_norm,
-         ilha = EXCLUDED.ilha,
-         atualizado_em = now()`,
+       ON CONFLICT (slug) DO NOTHING`,
       params,
     )
-    log(`  upsert lote ${i / CHUNK + 1}: +${lote.length}`)
   }
+  log(`Lista-mestra carregada (${slugs.length}).`)
 
-  // Enriquecer linhas ainda sem RRAL (resumível entre execuções).
+  // Enriquecer linhas ainda sem RRAL (resumível entre execuções), em paralelo.
   const porEnriquecer = await query<{ slug: string }>(
     `SELECT slug FROM registo_al
       WHERE fonte = 'azores' AND rral IS NULL
       ${enrichLimit > 0 ? 'LIMIT ' + enrichLimit : ''}`,
   )
-  log(`A enriquecer ${porEnriquecer.length} detalhes...`)
+  log(`A enriquecer ${porEnriquecer.length} detalhes (concorrência ${concurrency})...`)
 
   let enriquecidos = 0
-  for (const { slug } of porEnriquecer) {
-    try {
-      const d = await fetchDetalhe(slug)
-      if (d.rral || d.morada) {
-        await query(
-          `UPDATE registo_al
-              SET rral = $2, morada = $3, morada_norm = $4, atualizado_em = now()
-            WHERE slug = $1`,
-          [slug, d.rral, d.morada, d.morada ? normalizeAddress(d.morada) : null],
-        )
-        enriquecidos++
-      }
-    } catch (e) {
-      log(`detalhe ${slug} falhou: ${(e as Error).message}`)
-    }
-    await new Promise((r) => setTimeout(r, delayMs))
-  }
+  let feitos = 0
+  await pool(porEnriquecer, concurrency, async ({ slug }) => {
+    const d = await fetchDetalhe(slug)
+    const nome = d.nome || nomeFromSlug(slug)
+    const ilha = ilhaFromMorada(d.morada)
+    await query(
+      `UPDATE registo_al
+          SET nome = $2, nome_norm = $3, rral = $4, morada = $5, morada_norm = $6,
+              ilha = COALESCE($7, ilha), atualizado_em = now()
+        WHERE slug = $1`,
+      [
+        slug,
+        nome,
+        normalizeName(commercialName(nome)),
+        d.rral,
+        d.morada,
+        d.morada ? normalizeAddress(d.morada) : null,
+        ilha,
+      ],
+    )
+    if (d.rral) enriquecidos++
+    if (++feitos % 500 === 0) log(`  enriquecidos ${feitos}/${porEnriquecer.length}`)
+  })
 
-  return { total: pins.length, enriquecidos }
+  return { total: slugs.length, enriquecidos }
 }

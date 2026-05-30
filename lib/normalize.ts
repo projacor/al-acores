@@ -88,9 +88,15 @@ export function extractRral(text: string): string | null {
   return null
 }
 
-/** Normaliza um número RRAL para comparação (só dígitos e barra). */
+/**
+ * Normaliza um número RRAL para comparação. Extrai o primeiro número
+ * (opcionalmente com /ano) e tira zeros à esquerda e sufixos como "/AL".
+ * Ex.: "4449/AL"→"4449", "186/16CAMARA..."→"186/16", "79,15"→"79".
+ */
 export function normalizeRral(s: string): string {
-  return s.replace(/[^0-9/]/g, '').replace(/^0+/, '')
+  const m = String(s).match(/(\d+(?:\/\d{1,4})?)/)
+  if (!m) return ''
+  return m[1].replace(/^0+/, '') || '0'
 }
 
 /** Similaridade de Jaccard entre dois conjuntos de tokens. */

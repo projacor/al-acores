@@ -6,10 +6,7 @@ import { refreshRnal } from '../lib/registo/rnal'
 async function main() {
   await initSchema()
   const log = (m: string) => console.log(`[registo] ${m}`)
-  const r = await refreshAzores({
-    log,
-    delayMs: Number(process.env.SCRAPE_DELAY_MS || 800),
-  })
+  const r = await refreshAzores({ log })
   await refreshRnal(log)
   log(`Concluído: ${r.total} AL na lista-mestra, ${r.enriquecidos} detalhes enriquecidos.`)
   await getPool().end()

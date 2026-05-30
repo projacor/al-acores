@@ -33,31 +33,42 @@ export type Alvo = {
   rralDetetado: string | null
 }
 
+// O registo é carregado uma vez por processo (o worker corre um scan e sai).
+let cacheCandidatos: RegistoRow[] | null = null
+let cacheRral: Map<string, RegistoRow> | null = null
+
+async function getCandidatos(): Promise<RegistoRow[]> {
+  if (!cacheCandidatos) {
+    cacheCandidatos = await query<RegistoRow>(
+      `SELECT id, rral, nome, nome_norm, morada, morada_norm, ilha FROM registo_al`,
+    )
+    cacheRral = new Map()
+    for (const r of cacheCandidatos) {
+      if (r.rral) {
+        const k = normalizeRral(r.rral)
+        if (k && !cacheRral.has(k)) cacheRral.set(k, r)
+      }
+    }
+  }
+  return cacheCandidatos
+}
+
 /**
  * Classifica um anúncio do Booking contra o índice oficial (registo_al).
  * Ordem: nº RRAL → nome (com reforço de morada) → senão, suspeito.
  */
 export async function classificar(alvo: Alvo): Promise<Classificacao> {
-  // 1) Match exato por número de registo (quando o índice já tem RRAL).
+  const candidatos = await getCandidatos()
+
+  // 1) Match exato por número de registo (sinal mais forte).
   if (alvo.rralDetetado) {
     const rral = normalizeRral(alvo.rralDetetado)
-    const [hit] = await query<RegistoRow>(
-      `SELECT id, rral, nome, nome_norm, morada, morada_norm, ilha
-         FROM registo_al
-        WHERE rral IS NOT NULL
-          AND replace(replace(replace(rral, ' ', ''), '-', ''), 'RRAL', '') = $1
-        LIMIT 1`,
-      [rral],
-    )
+    const hit = rral ? cacheRral?.get(rral) : undefined
     if (hit) return { registado: true, via: 'rral', match: hit, score: 1 }
-    // Não confirmado por RRAL — continua para o match por nome (cobertura de
-    // RRAL no índice é incremental, por isso não declaramos suspeito já aqui).
+    // Não confirmado por RRAL — continua para o match por nome.
   }
 
   // 2) Match aproximado por nome (+ confirmação por morada).
-  const candidatos = await query<RegistoRow>(
-    `SELECT id, rral, nome, nome_norm, morada, morada_norm, ilha FROM registo_al`,
-  )
   const alvoTokens = nameTokens(alvo.nome)
   const alvoMorada = alvo.morada ? normalizeAddress(alvo.morada) : ''
 

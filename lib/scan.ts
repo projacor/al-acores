@@ -33,7 +33,7 @@ async function garantirRegisto(): Promise<void> {
   const obsoleto = row?.idade == null || Number(row.idade) > REGISTO_MAX_IDADE_DIAS
   if (vazio || obsoleto) {
     log('Índice do registo obsoleto/vazio — a atualizar a partir do portal dos Açores...')
-    const r = await refreshAzores({ log, delayMs: Number(process.env.SCRAPE_DELAY_MS || 800) })
+    const r = await refreshAzores({ log })
     await refreshRnal(log)
     log(`Registo atualizado: ${r.total} AL, ${r.enriquecidos} detalhes enriquecidos.`)
   } else {
