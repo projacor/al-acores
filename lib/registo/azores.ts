@@ -9,7 +9,16 @@ import { query } from '../db'
 import { normalizeAddress, normalizeName, extractRral } from '../normalize'
 
 const BASE = 'https://turismo.azores.gov.pt'
-const UA = 'Mozilla/5.0 (compatible; AL-Acores-Compliance/1.0)'
+
+// Headers de browser realista — o portal devolve 403 a User-Agents não-browser.
+const HEADERS: Record<string, string> = {
+  'User-Agent':
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
+    '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  Accept:
+    'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  'Accept-Language': 'pt-PT,pt;q=0.9,en;q=0.8',
+}
 
 const SLUG_ILHA: Record<string, string> = {
   'santa-maria': 'Santa Maria',
@@ -38,7 +47,7 @@ function decodeEntities(s: string): string {
 
 /** Lê o array `pins` do mapa → lista completa de AL (sem RRAL/morada). */
 export async function fetchPins(): Promise<Pin[]> {
-  const res = await fetch(`${BASE}/al-map/`, { headers: { 'User-Agent': UA } })
+  const res = await fetch(`${BASE}/al-map/`, { headers: HEADERS })
   if (!res.ok) throw new Error(`al-map respondeu ${res.status}`)
   const html = await res.text()
   const m = html.match(/var pins = (\[[\s\S]*?\]);/)
@@ -61,7 +70,7 @@ type Detalhe = { rral: string | null; morada: string | null }
 
 /** Lê RRAL e morada de uma página de detalhe /pin/<alias>/. */
 export async function fetchDetalhe(alias: string): Promise<Detalhe> {
-  const res = await fetch(`${BASE}/pin/${alias}/`, { headers: { 'User-Agent': UA } })
+  const res = await fetch(`${BASE}/pin/${alias}/`, { headers: HEADERS })
   if (!res.ok) return { rral: null, morada: null }
   const html = await res.text()
 
