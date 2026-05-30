@@ -1,0 +1,12 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "_comment": "Config de REFERÊNCIA para o serviço 'worker'. No Railway: criar um 2º serviço a partir do mesmo repo, definir Start Command = 'npm run scan', Cron Schedule = '0 9 * * *' e a variável de ambiente TZ=Europe/Lisbon. O cron do Railway corre o container à hora marcada e termina-o quando o processo sai.",
+  "build": {
+    "builder": "NIXPACKS"
+  },
+  "deploy": {
+    "startCommand": "npm run scan",
+    "cronSchedule": "0 9 * * *",
+    "restartPolicyType": "NEVER"
+  }
+}

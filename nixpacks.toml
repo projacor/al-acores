@@ -1,0 +1,26 @@
+# Configuração de build partilhada pelos serviços web e worker no Railway.
+# O worker precisa do Chromium (Playwright) e respetivas libs de sistema.
+
+[phases.setup]
+nixPkgs = ["nodejs_20"]
+# Bibliotecas de sistema exigidas pelo Chromium headless.
+aptPkgs = [
+  "libnss3", "libnspr4", "libatk1.0-0", "libatk-bridge2.0-0", "libcups2",
+  "libdrm2", "libxkbcommon0", "libxcomposite1", "libxdamage1", "libxfixes3",
+  "libxrandr2", "libgbm1", "libasound2", "libpango-1.0-0", "libcairo2",
+  "libatspi2.0-0", "fonts-liberation", "libgtk-3-0"
+]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+# Descarrega o binário do Chromium e compila o Next.js.
+cmds = [
+  "npx playwright install chromium",
+  "npm run build"
+]
+
+[start]
+# Sobreposto por cada serviço no Railway (web: 'npm start'; worker: 'npm run scan').
+cmd = "npm start"
