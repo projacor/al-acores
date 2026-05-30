@@ -20,8 +20,12 @@ async function main() {
   let registados = 0
   let novos = 0
   for (const it of itens) {
-    // 1) Cruzar por nome contra o índice do registo.
-    const c = await classificar({ nome: it.nome, morada: null, rralDetetado: null })
+    // Alguns hosts põem o nº de registo no título ("AL/3030", "RRAL 1234").
+    const rralTitulo =
+      it.nome.match(/\b(?:RRAL|A\.?L\.?)[\s/:.-]*(\d{2,6}(?:\/\d{2,4})?)/i)?.[1] || null
+
+    // 1) Cruzar por nome (+ RRAL do título, se houver) contra o registo.
+    const c = await classificar({ nome: it.nome, morada: null, rralDetetado: rralTitulo })
     let registado = c.registado
     // 2) Fallback: pesquisa o nome no portal do governo.
     if (!registado) {
