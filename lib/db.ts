@@ -77,5 +77,20 @@ export async function initSchema(): Promise<void> {
       estado        TEXT,
       detalhe       TEXT
     );
+
+    -- Anúncios do Facebook Marketplace com indícios de curta-duração/turístico.
+    -- Não cruzáveis com o registo (sem RRAL/morada) → vão para revisão manual.
+    CREATE TABLE IF NOT EXISTS fb_revisao (
+      id           SERIAL PRIMARY KEY,
+      fb_id        TEXT UNIQUE NOT NULL,
+      titulo       TEXT,
+      preco        TEXT,
+      ilha         TEXT,
+      descricao    TEXT,
+      indicios     TEXT,
+      url          TEXT NOT NULL,
+      estado       TEXT NOT NULL DEFAULT 'novo',
+      visto_em     TIMESTAMPTZ DEFAULT now()
+    );
   `)
 }

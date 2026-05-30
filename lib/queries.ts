@@ -104,3 +104,30 @@ export async function contarPorEstado(): Promise<Record<string, number>> {
   )
   return Object.fromEntries(rows.map((r) => [r.estado, Number(r.n)]))
 }
+
+export type RevisaoView = {
+  id: number
+  titulo: string | null
+  preco: string | null
+  ilha: string | null
+  descricao: string | null
+  indicios: string | null
+  url: string
+  estado: string
+  visto_em: string
+}
+
+export async function listarRevisao(estado?: string): Promise<RevisaoView[]> {
+  if (semDb()) return []
+  const params: unknown[] = []
+  let filtro = ''
+  if (estado) {
+    params.push(estado)
+    filtro = 'WHERE estado = $1'
+  }
+  return query<RevisaoView>(
+    `SELECT id, titulo, preco, ilha, descricao, indicios, url, estado, visto_em
+       FROM fb_revisao ${filtro} ORDER BY visto_em DESC LIMIT 500`,
+    params,
+  )
+}
